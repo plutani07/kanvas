@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Secrets live in android/local.properties (git-ignored), never in the repo:
+//   kanvas.fontsKey=<Google Fonts Developer API key>
+//   kanvas.storeFile=../kanvas-release.jks
+//   kanvas.storePassword=...
+//   kanvas.keyAlias=kanvas
+//   kanvas.keyPassword=...
+// CI can pass the same values as environment variables (KANVAS_FONTS_KEY, KANVAS_STORE_FILE, ...).
+def localProps = new Properties()
+def lp = rootProject.file('local.properties')
+if (lp.exists()) lp.withInputStream { localProps.load(it) }
+def secret = { String key, String env -> (localProps.getProperty(key) ?: System.getenv(env) ?: '') }
+
+android {
+    namespace 'com.kvanie.kanvas'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.kvanie.kanvas'
+        minSdk 29          // MediaStore RELATIVE_PATH saves need API 29+
+        targetSdk 34
+        versionCode 2
+        versionName '0.2.0'
+        buildConfigField 'String', 'FONTS_API_KEY', "\"${secret('kanvas.fontsKey', 'KANVAS_FONTS_KEY')}\""
+    }
+
+    buildFeatures { buildConfig true }
+
+    signingConfigs {
+        release {
+            def sf = secret('kanvas.storeFile', 'KANVAS_STORE_FILE')
+            if (sf) {
+                storeFile file(sf)
+                storePassword secret('kanvas.storePassword', 'KANVAS_STORE_PASSWORD')
+                keyAlias secret('kanvas.keyAlias', 'KANVAS_KEY_ALIAS')
+                keyPassword secret('kanvas.keyPassword', 'KANVAS_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Keep the APK's page in sync with web/index.html (the single source of truth for the app UI).
+tasks.register('syncWeb', Copy) {
+    from rootProject.file('../web/index.html')
+    into 'src/main/assets'
+}
+preBuild.dependsOn 'syncWeb'
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}

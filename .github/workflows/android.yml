@@ -1,0 +1,35 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.KANVAS_KEYSTORE_B64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Bundle jsQR for offline QR scanning
+        run: curl -fsSL https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js -o android/app/src/main/assets/jsQR.js
+      - name: Restore signing key
+        if: env.HAS_KEYSTORE == 'true'
+        env: { KS: '${{ secrets.KANVAS_KEYSTORE_B64 }}' }
+        run: echo "$KS" | base64 -d > android/kanvas-release.jks
+      - name: Build release APK
+        working-directory: android
+        env:
+          KANVAS_FONTS_KEY: ${{ secrets.KANVAS_FONTS_KEY }}
+          KANVAS_STORE_FILE: ${{ env.HAS_KEYSTORE == 'true' && '../kanvas-release.jks' || '' }}
+          KANVAS_STORE_PASSWORD: ${{ secrets.KANVAS_STORE_PASSWORD }}
+          KANVAS_KEY_ALIAS: ${{ secrets.KANVAS_KEY_ALIAS }}
+          KANVAS_KEY_PASSWORD: ${{ secrets.KANVAS_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanvas-apk
+          path: android/app/build/outputs/apk/release/*.apk
