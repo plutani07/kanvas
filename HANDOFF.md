@@ -26,8 +26,7 @@ Target device: Kev's Android phone, finger drawing. Also has Android Studio on h
 ## Layout
 
 ```
-web/index.src.html   App source as an artifact body (no <html>/<head>); also published as a claude.ai artifact
-web/index.html       Same page wrapped in a full HTML document; this is what the APK ships
+web/index.html       The whole app (one page, no build step); this is what the APK ships
 android/             Gradle project (AGP 8.5.2, compileSdk 34, minSdk 29, Java 17, androidx.webkit 1.11.0)
   app/src/main/java/com/kvanie/kanvas/MainActivity.java   WebView host + JS bridge
   app/src/main/assets/index.html                          Copied from web/index.html by the syncWeb task
@@ -35,9 +34,8 @@ android/             Gradle project (AGP 8.5.2, compileSdk 34, minSdk 29, Java 1
 docs/ibis-qr-format.md          What's known about ibisPaint's brush QR payload
 ```
 
-If you edit `web/index.src.html`, regenerate `web/index.html` by wrapping it:
-`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"></head><body>` + source + `</body></html>`.
-(Or just treat `web/index.html` as the source from now on and drop the src file.)
+`web/index.html` is the only source (the old `index.src.html` artifact copy was dropped in v0.3).
+Try it in a browser: `python -m http.server 5192` in `web/`, open http://127.0.0.1:5192/ at phone size.
 
 ## How the Android wrapper works
 
@@ -54,7 +52,25 @@ If you edit `web/index.src.html`, regenerate `web/index.html` by wrapping it:
 Google Fonts key: in Google Cloud Console, restrict it to the **Web Fonts Developer API** only (API restriction).
 Don't add an Android-app restriction; the call comes from WebView `fetch`, not an Android SDK.
 
-## Features in the page (v0.2)
+## Layout of the app (v0.3, modelled on ibisPaint)
+
+- **My Gallery** is the first screen: every artwork on the device as thumbnails. Tap one to select it, tap again (or Edit) to open.
+  Bottom bar: New canvas, Artwork information (title, size, dates), Save image/project, ⋮ (duplicate, delete, new canvas
+  from a picture, open a project file, Recently deleted, import ibisPaint brush, settings). Select mode deletes several.
+  Delete goes to Recently deleted, which keeps the layers until "Delete for good".
+- **Canvas**: undo/redo top left; View (mirror, grid, smooth/pixelated zoom, fit), Selection, Stabilizer top right.
+  Above the bar, the current tool's sliders (size/opacity with −/+, or bucket tolerance, selection modes, the transform panel).
+  Bottom bar: Brush/Eraser toggle, Tools popup (12 tools in two columns), Brush window, Color window, ↓ hide everything,
+  Layer window, ← menu (back to gallery, save image/project, place photo, ibis QR, fonts, settings, how to use).
+  One window at a time; the bar button of an open window shows ⌄ and closes it.
+- **Windows**: Brush (preview, list, › for a brush's settings, Thickness/Opacity pinned), Color (hue ring + square, HSB or RGB
+  sliders, palette with history), Layer (add/duplicate/photo left; clear, invert, move, flip, merge, delete, filter, ⋮ right;
+  drag ≡ to reorder; clipping, alpha lock, blend, opacity at the bottom), Settings (gesture switches, eyedropper delay, pen pressure).
+- **Storage** (IndexedDB `kanvas`): `arts` = gallery list with thumbnails, `art:<id>` = one artwork's layers, `trash`,
+  `prefs`, `brushes`, `fonts`. All artwork writes go through one queue. The v0.2 `doc` key is copied into the gallery
+  once on first run and left in place as a backup.
+
+## Features in the page (v0.2, still there)
 
 - Tools: Move/Transform (Free, Perspective, Mesh warp), Selection (Lasso, Rectangle, Magic Wand; New/Add/Subtract),
   Brush, Eraser, Smudge, Blur, Fill (tolerance, expand, sample all layers), Eyedropper, Text (editable text layers, Google Fonts + uploaded fonts)
@@ -68,7 +84,8 @@ Don't add an Android-app restriction; the call comes from WebView `fetch`, not a
 
 ## Smoke-test checklist (on device)
 
-1. App opens to a blank portrait canvas with the left toolbar; the gesture tips card shows once.
+1. App opens to My Gallery. On a phone that had v0.2, the old canvas is there as one artwork. + makes a new canvas;
+   the gesture tips card shows once.
 2. Draw with Dip Pen; two-finger tap undoes; three-finger tap redoes.
 3. Pinch/twist zooms and rotates; tapping the zoom chip refits.
 4. Fill inside a closed line fills only that area.
@@ -78,14 +95,16 @@ Don't add an Android-app restriction; the call comes from WebView `fetch`, not a
 8. Canvas → Rotate right, then undo.
 9. Export PNG → file appears in Gallery under Pictures/Kanvas. Save project → Download/Kanvas.
 10. Import ibisPaint QR: pick a saved brush QR image → "Found a brush" → Add.
-11. Kill the app and reopen: the artwork is still there (autosave).
-12. Back button closes open panels first, then exits.
+11. Kill the app and reopen: the artwork is still there with its new thumbnail (autosave).
+12. Back button closes popups and windows first, then goes from the canvas to My Gallery, then exits.
+13. Gallery: duplicate, delete, restore from Recently deleted, rename in Artwork information.
 
 ## Known gaps / ideas for next passes
 
 - ibisPaint QR: only name, size and spacing are mapped. Kev can supply screenshots of each brush's ibisPaint settings to map the
   remaining float fields (see docs/ibis-qr-format.md). Custom brush-shape images aren't inside the QR.
 - Export to ibisPaint QR (reverse direction) isn't built.
+- Gallery: no drag-to-reorder or folders yet (ibisPaint has both). No time-lapse.
 - Selection marching ants are drawn from a downsampled contour; very thin wand selections look dotted.
 - Large canvases (over about 2500 px) plus many layers can run out of WebView memory on low-end phones; history caps at about 220 MB.
 - Possible later: Firebase (Auth + Storage) to sync brushes/projects across devices. Not needed for v1.
