@@ -9,3 +9,5 @@ android/app/build/
 android/.idea/
 *.iml
 .DS_Store
+node_modules/
+tests/artifacts/
