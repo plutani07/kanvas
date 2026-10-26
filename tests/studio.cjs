@@ -30,6 +30,7 @@ async function stroke(page, points) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({headless:true, ...(process.env.KANVAS_BROWSER_PATH ? {executablePath:process.env.KANVAS_BROWSER_PATH,args:['--no-sandbox','--no-zygote','--single-process','--disable-gpu','--disable-software-rasterizer']} : {})});
+  fs.mkdirSync(path.resolve(__dirname,'artifacts'),{recursive:true});
   const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
   const p=await context.newPage();monitor(p);await p.goto(url);await p.waitForFunction(()=>document.body.classList.contains('gal')&&S.brushes.length>0);
   await check('desktop gallery opens and custom canvas can be created', async()=>{
@@ -85,9 +86,44 @@ async function stroke(page, points) {
     await p.evaluate(async()=>{await setTool('move');if(!FL)await startTransform()});await p.waitForFunction(()=>!!FL);const x=await p.evaluate(()=>activeL().text.x);await p.evaluate(async()=>{FL.t.tx+=10;await applyTransform()});assert.equal(await p.evaluate(()=>activeL().text.x),x+10);
     await p.evaluate(()=>{undo();undo()});await p.evaluate(i=>{S.active=i;setTool('brush')},oldActive);assert.equal(await p.evaluate(()=>S.layers.length),5);
     await p.evaluate(()=>{S.active=S.layers.findIndex(l=>l.name!=='Paper'&&l.ctx.getImageData(150,100,1,1).data[3]>0)});
-    const before=await pixel(p,150,100);await p.click('#railFilter');await p.click('#ainv');await settle(p);await p.click('#aapply');assert.notDeepEqual(await pixel(p,150,100),before);await p.evaluate(()=>undo());assert.deepEqual(await pixel(p,150,100),before);
+    const before=await pixel(p,150,100);await p.click('#railFilter');await p.click('#fxQuick');await p.click('#ainv');await settle(p);await p.click('#aapply');assert.notDeepEqual(await pixel(p,150,100),before);await p.evaluate(()=>undo());assert.deepEqual(await pixel(p,150,100),before);
     await p.evaluate(i=>{S.active=i;renderLayers()},oldActive);
     assert.equal(await p.evaluate(()=>ensureJsQR()),true);
+  });
+  await check('FX browser previews, compares, searches and cancels without changing layer pixels',async()=>{
+    await p.evaluate(()=>{const L=newLayer('FX fixture');L.ctx.fillStyle='#285078';L.ctx.fillRect(60,60,240,240);addLayerAt(L,S.active+1,'FX test layer')});
+    const before=await pixel(p,120,120),n=await p.evaluate(()=>S.undo.length);
+    await p.click('#railFilter');await p.waitForFunction(()=>!!FX_UI.session?.result);assert.equal(await p.locator('[data-fx]').count(),70);await p.locator('#fxApply').focus();await p.keyboard.press('Tab');assert.equal(await p.evaluate(()=>document.activeElement.id),'shClose');
+    await p.fill('#fxSearch','invert');await p.click('[data-fx="invert"]');await p.waitForFunction(()=>FX_UI.session?.filter.id==='invert'&&!!FX_UI.session.result);
+    assert.deepEqual(await pixel(p,120,120),before);assert.notDeepEqual(await p.evaluate(()=>[...pc.getImageData(120,120,1,1).data]),before);
+    await p.click('#fxCompare');assert.deepEqual(await p.evaluate(()=>[...pc.getImageData(120,120,1,1).data]),before);
+    await p.click('#fxCancel');assert.deepEqual(await pixel(p,120,120),before);assert.equal(await p.evaluate(()=>S.undo.length),n);assert.equal(await p.evaluate(()=>previewOn),false);
+  });
+  await check('FX applies only inside selections, preserves alpha lock, and supports undo/redo',async()=>{
+    await p.evaluate(()=>{selChange('FX test selection',m=>m.fillRect(80,80,80,80),'new');activeL().alphaLock=true});
+    const outside=await pixel(p,200,200),inside=await pixel(p,120,120),n=await p.evaluate(()=>S.undo.length);
+    await p.click('#railFilter');await p.waitForFunction(()=>!!FX_UI.session?.result);await p.click('[data-fx="invert"]');await p.waitForFunction(()=>!!FX_UI.session?.result);
+    await p.click('#fxApply');await p.waitForFunction(()=>FX_UI.session===null);assert.equal(await p.evaluate(()=>S.undo.length),n+1);
+    assert.deepEqual(await pixel(p,120,120),[215,175,135,255]);assert.deepEqual(await pixel(p,200,200),outside);assert.equal((await pixel(p,10,10))[3],0);
+    await p.evaluate(()=>undo());assert.deepEqual(await pixel(p,120,120),inside);await p.evaluate(()=>redo());assert.deepEqual(await pixel(p,120,120),[215,175,135,255]);await p.evaluate(()=>undo());
+    await p.evaluate(()=>{deselect();activeL().alphaLock=false});
+  });
+  await check('FX rendering cancellation ignores late worker results and autosave excludes preview',async()=>{
+    const before=await pixel(p,120,120),n=await p.evaluate(()=>S.undo.length);
+    await p.evaluate(()=>{window.RealFXWorker=window.Worker;window.Worker=class extends RealFXWorker{set onmessage(fn){super.onmessage=e=>setTimeout(()=>fn(e),300)}}});
+    await p.click('#railFilter');await p.waitForFunction(()=>!!FX_UI.session?.result);
+    const saved=await p.evaluate(async()=>{markDirty();await saveDoc();const a=ARTS.find(a=>a.id===S.artId),im=await createImageBitmap(a.thumb),c=mkC(im.width,im.height);c.getContext('2d').drawImage(im,0,0);im.close();return [...c.getContext('2d').getImageData(Math.round(120*c.width/S.W),Math.round(120*c.height/S.H),1,1).data]});assert.deepEqual(saved,before);
+    await p.click('#fxApply');await p.click('#fxCancel');await p.waitForTimeout(500);assert.deepEqual(await pixel(p,120,120),before);assert.equal(await p.evaluate(()=>S.undo.length),n);assert.equal(await p.evaluate(()=>previewOn),false);
+    await p.evaluate(()=>{window.Worker=window.RealFXWorker;delete window.RealFXWorker});
+  });
+  await check('FX falls back when Workers are unavailable and is reachable on phones',async()=>{
+    await p.evaluate(()=>{window.RealFXWorker=window.Worker;window.Worker=class{constructor(){throw new Error('Workers blocked')}}});
+    await p.click('#railFilter');await p.waitForFunction(()=>!!FX_UI.session?.result);assert.equal(await p.evaluate(()=>FX_UI.workerAvailable),false);await p.fill('#fxSearch','noise');await p.click('[data-fx="noise"]');await p.waitForFunction(()=>FX_UI.session?.filter.id==='noise'&&!!FX_UI.session.result);await p.locator('#fxSearch').focus();await p.keyboard.press('Escape');assert.equal(await p.evaluate(()=>FX_UI.session),null);
+    await p.evaluate(()=>{window.Worker=window.RealFXWorker;delete window.RealFXWorker;FX_UI.workerAvailable=true;FX_UI.query='';FX_UI.group='all';FX_UI.last='brightness'});
+    await p.setViewportSize({width:390,height:844});await settle(p);await p.click('#bTool');await p.click('[data-tk="filter"]');await p.waitForFunction(()=>!!FX_UI.session?.result);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await p.screenshot({path:path.resolve(__dirname,'artifacts/fx-phone.png')});await p.click('#fxCancel');await p.setViewportSize({width:1440,height:1000});await settle(p);
+    await p.click('#railFilter');await p.waitForFunction(()=>!!FX_UI.session?.result);await p.screenshot({path:path.resolve(__dirname,'artifacts/fx-desktop.png')});await p.click('#fxCancel');
+    await p.evaluate(()=>{layerAct('del');setTool('brush')});assert.equal(await p.evaluate(()=>S.layers.length),5);
   });
   let projectPath;
   await check('PNG, JPEG, and editable projects produce browser downloads',async()=>{

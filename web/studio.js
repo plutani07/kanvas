@@ -107,6 +107,7 @@ function studioCommandItems(){return[
  ['New canvas','plus',openNew,'Ctrl+N'],['Open project','open',()=>$('#fileProj').click(),'Ctrl+O'],['Import image as new canvas','image',()=>$('#fileNewPic').click()],['Recently deleted','trash',openTrash],['Settings','cog',openSettings],['Import ibisPaint brush QR','qr',openIbis],
  ...inGallery?[]:[
  ['Save artwork on this device','save',studioSave,'Ctrl+S'],['Export artwork or project','save',studioExport,'Ctrl+Shift+S'],['Back to gallery','gallery',goGallery],['Rename artwork','edit',studioRename],['Undo','undo',undo,'Ctrl+Z'],['Redo','redo',redo,'Ctrl+Shift+Z'],
+ ...KanvasFX.catalog.map(f=>['FX: '+f.name,'fx',()=>openFX(f.id)]),
  ...TOOLS.map(([k,n,i])=>[n,i,()=>pickTool(k),({brush:'B',eraser:'E',move:'V',lasso:'L',fill:'G',text:'T',picker:'I'})[k]]),
  ['New layer','plus',()=>layerAct('add')],['Duplicate layer','copy',()=>layerAct('dup')],['Layer options / rename layer','layers',openLayerMore],['Merge layer down','merge',()=>layerAct('merge')],['Select all','rect',selectAll,'Ctrl+A'],['Deselect','newsel',deselect,'Ctrl+D'],['Invert selection','invert',invertSel],['Fit canvas','resize',fitView,'Ctrl+0'],['Actual size (100%)','resize',()=>studioZoom(1),'Ctrl+1'],['Focus mode','resize',()=>setFull(!document.body.classList.contains('full')),'Tab'],['Color mixer','hsbi',openColor],['Brush library','brush',openBrushes],['Show layers','layers',()=>studioDesktop()?studioChoosePanel('layers'):openLayers()],...(studioDesktop()?[['History','undo',()=>studioChoosePanel('history')],['Navigator','move',()=>studioChoosePanel('navigator')]]:[]),['Flip canvas horizontally','fliph',CANVAS_OPS.fliph],['Rotate canvas right','rotr',CANVAS_OPS.rotr],['Canvas size','canvas',openCanvasSize],['Resize image','resize',openResize]
  ]]}
@@ -120,6 +121,7 @@ $$('[data-menu]').forEach(b=>b.onclick=()=>{const group=b.dataset.menu,items=stu
 // Mouse/keyboard navigation supplements the existing touch pinch/twist gestures.
 let studioSpace=false,studioPan=null;
 window.addEventListener('keydown',e=>{
+ if(window.KanvasFXUI?.session){if(!e.target.closest?.('#sheet')||((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k')){if(e.key==='Escape')closeSheet();e.preventDefault();e.stopImmediatePropagation()}else e.stopPropagation();return}
  if(!$('#commands').hidden)return;
  const input=e.target.closest?.('input,textarea,select,[contenteditable]'),mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
  if(mod&&k==='k'){e.preventDefault();studioCommands();return}if(input)return;

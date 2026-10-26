@@ -257,6 +257,7 @@ body.gal #gallery{display:flex}
 @media (prefers-reduced-motion:reduce){#sheet,#toast,#zoomChip{transition:none}}
 </style>
 <link rel="stylesheet" href="studio.css">
+<link rel="stylesheet" href="fx.css">
 
 <div id="app">
   <div id="stage">
@@ -1015,7 +1016,8 @@ function drawColorUI(){barSync();if(sheetName!=='color')return;const n=$('#cNow'
  const vals=hsb?[[Math.round(h),Math.round(h)+'°'],[Math.round(s*100),Math.round(s*100)+'%'],[Math.round(v*100),Math.round(v*100)+'%']]:[[R8,'R '+R8],[G8,'G '+G8],[B8,'B '+B8]];
  for(let i=0;i<3;i++){const el=$('#c'+(i+1));if(!el)continue;el.style.setProperty('--trk',tr[i]);if(document.activeElement!==el||!hsvDrag)el.value=vals[i][0];$('#c'+(i+1)+'o').textContent=vals[i][1]}}
 
-function openAdjust(){const L=activeL();if(FL)return toast('Finish the transform first');if(!L.visible)return toast('This layer is hidden');
+function openAdjust(){return openFX()}
+function openLegacyAdjust(){const L=activeL();if(FL)return toast('Finish the transform first');if(!L.visible)return toast('This layer is hidden');
  const A={hue:0,sat:100,bri:100,con:100,blur:0,gray:false,inv:false,sepia:false};
  openSheet('adjust','Adjust · '+L.name,`<div class="sect">Color</div>${sl('ah','Hue',-180,180,1,0,v=>v+'°')}${sl('as','Saturation',0,200,1,100,v=>v+'%')}${sl('ab','Brightness',0,200,1,100,v=>v+'%')}${sl('ac','Contrast',0,200,1,100,v=>v+'%')}
  <div class="sect">Filters</div>${sl('abl','Gaussian blur',0,40,.5,0,v=>v+'px')}<div class="row"><button class="tog" id="agray"><i></i>Black & white</button><button class="tog" id="ainv"><i></i>Invert</button><button class="tog" id="asep"><i></i>Sepia</button></div>
@@ -1027,7 +1029,7 @@ function openAdjust(){const L=activeL();if(FL)return toast('Finish the transform
   if(S.sel){maskInto(pc,FULL());tc.setTransform(1,0,0,1,0,0);tc.globalCompositeOperation='source-over';tc.clearRect(0,0,S.W,S.H);tc.drawImage(L.canvas,0,0);tc.globalCompositeOperation='destination-out';tc.drawImage(msk,0,0);tc.globalCompositeOperation='source-over';pc.drawImage(tmp,0,0)}compositeAll()})};
  [['ah','hue',v=>v+'°'],['as','sat',v=>v+'%'],['ab','bri',v=>v+'%'],['ac','con',v=>v+'%'],['abl','blur',v=>v+'px']].forEach(([id,k,fm])=>bindSl(id,fm,v=>{A[k]=v;go()}));
  [['agray','gray'],['ainv','inv'],['asep','sepia']].forEach(([id,k])=>$('#'+id).onclick=e=>{A[k]=!A[k];e.currentTarget.classList.toggle('on',A[k]);go()});
- $('#areset').onclick=()=>{onSheetClose=null;previewOn=false;openAdjust()};
+ $('#areset').onclick=()=>{onSheetClose=null;previewOn=false;openLegacyAdjust()};
  $('#aapply').onclick=()=>{const b=snap(L);if(L.text)L.text=null;L.ctx.clearRect(0,0,S.W,S.H);L.ctx.drawImage(prev,0,0);pixelHist(L,b,'Adjust');onSheetClose=null;previewOn=false;closeSheet();compositeAll();renderLayers();toast('Adjustment applied')}}
 
 let textDraft=null;
@@ -1158,7 +1160,7 @@ async function saveNow(){if(!dirty||!S.artId)return;const id=S.artId,revision=ed
  saveState='saving';
  const W=S.W,H=S.H,active=S.active,name=S.docName;
  const pending=S.layers.map(L=>({name:L.name,visible:L.visible,opacity:L.opacity,blend:L.blend,alphaLock:L.alphaLock,clip:L.clip,text:L.text?{...L.text}:null,blob:toBlob(L.canvas,'image/png')}));
- const thumb=thumbOf(comp);
+ const wasPreview=previewOn;previewOn=false;compositeAll();const thumb=thumbOf(comp);previewOn=wasPreview;if(wasPreview)compositeAll();
  try{const layers=await Promise.all(pending.map(async l=>({...l,blob:await l.blob}))),thumbnail=await thumb;
   const arts=ARTS.map(a=>a.id===id?{...a,name,W,H,layers:layers.length,updated:Date.now(),thumb:thumbnail}:a);
   await DB.batch([['art:'+id,{W,H,active,name,layers}],['arts',arts]]);
@@ -1273,5 +1275,7 @@ addEventListener('resize',()=>{if(popName)closePop()});
  resizeView();uiColor();uiHist();setTool('brush');showGallery();
 })();
 </script>
+<script src="fx-engine.js"></script>
 <script src="studio.js"></script>
+<script src="fx.js"></script>
 </body></html>

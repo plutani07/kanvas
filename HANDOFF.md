@@ -7,6 +7,7 @@ Kanvas is a phone-first drawing application wrapped in an Android WebView, with 
 - `web/index.html`: stamp-based painting engine, selections/transforms, text, gallery, document storage and native bridge calls.
 - `web/studio.js`: direct tool rail, application menus, command search, desktop inspector, gallery search/sorting and keyboard/mouse navigation.
 - `web/studio.css`: responsive Studio layout and purple accent theme. The existing system UI font stack is retained.
+- `web/fx-engine.js`, `fx-worker.js`, `fx.js`, `fx.css`: deterministic raster effects and the searchable FX browser. Sources are snapshotted; previews are bounded and cancellable; Apply creates one undo entry at document resolution. See docs/fx-filters.md.
 - `web/jsQR.js`: vendored QR decoder; its license is in `web/jsQR.LICENSE.txt`.
 - `android/`: Java 17 / SDK 34 Android WebView host. Gradle copies web assets into the APK before each build.
 - `tests/studio.cjs`: Chromium integration tests, including phone-sized touch input and injected storage failures.

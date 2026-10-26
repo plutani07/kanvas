@@ -18,6 +18,7 @@ Open http://localhost:5192. Use a consistent origin and port to keep access to y
 - Lasso, rectangular and magic-wand selections; add, subtract, invert and transform selections.
 - Layer visibility, opacity, 16 blend modes, clipping, alpha lock, duplication, ordering and merging.
 - Free, perspective and mesh transforms, editable text layers, uploaded fonts and optional Google Fonts.
+- A searchable FX Studio with 70 offline filters, live previews, comparison, full-resolution Apply, mix and parameter controls, and selection/alpha-lock support.
 - Image import, adjustments, canvas resizing and rotation, PNG/JPEG export and editable project round-trips.
 - Local gallery, rename, duplicate, search, sort, delete and restore.
 - Desktop Layers, Brushes, History and Navigator panels, full color mixer, and a searchable command palette.
@@ -49,7 +50,7 @@ On a phone, Menu → Find a command provides command search without a keyboard.
 
 ## Source and Android
 
-`web/index.html` contains the existing engine and document/storage commands. `web/studio.js` connects the workspace controls to those commands; `web/studio.css` contains its responsive design. `web/` is authoritative. Gradle's `syncWeb` copies all HTML, CSS and JS assets before Android builds. To refresh the checked-in Android assets manually:
+`web/index.html` contains the existing engine and document/storage commands. `web/studio.js` connects the workspace controls to those commands; `web/studio.css` contains its responsive design. `web/fx-engine.js` implements the raster effects; `web/fx-worker.js` runs them off the UI thread; `web/fx.js` and `web/fx.css` provide the FX browser. See [docs/fx-filters.md](docs/fx-filters.md) for the catalog and limits. `web/` is authoritative. Gradle's `syncWeb` copies all HTML, CSS and JS assets before Android builds. To refresh the checked-in Android assets manually:
 
 ```sh
 npm run sync:android
@@ -72,7 +73,7 @@ npx playwright install chromium
 npm test
 ```
 
-Integration checks exercise real painted pixels, undo/redo, layer controls, selections, navigation, command search, image/project downloads, save/reload, project validation, storage failure, concurrent edits during saves, gallery restore, and phone touch drawing. Screenshots are written to `tests/artifacts/` and uploaded by browser CI. `KANVAS_BROWSER_PATH` can select a preinstalled Chromium executable.
+The engine checks render every filter deterministically and verify source immutability, known pixel values, alpha handling, selection isolation, and mix. Integration checks exercise FX preview/compare/cancel/apply, late worker results, full-resolution selection/alpha-lock behavior, worker fallback, phone layout, and real painted pixels, undo/redo, layer controls, selections, navigation, command search, image/project downloads, save/reload, project validation, storage failure, concurrent edits during saves, gallery restore, and phone touch drawing. Screenshots are written to `tests/artifacts/` and uploaded by browser CI. `KANVAS_BROWSER_PATH` can select a preinstalled Chromium executable.
 
 ## Practical limits
 

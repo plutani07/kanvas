@@ -4,7 +4,7 @@
   "private": true,
   "description": "Offline-first painting workspace for browsers and Android",
   "scripts": {
-    "test": "node tests/studio.cjs",
+    "test": "node tests/fx-engine.cjs && node tests/studio.cjs",
     "sync:android": "node scripts/sync-web.cjs"
   },
   "devDependencies": { "playwright": "1.62.1" }
