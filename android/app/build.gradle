@@ -3,12 +3,11 @@ plugins {
 }
 
 // Secrets live in android/local.properties (git-ignored), never in the repo:
-//   kanvas.fontsKey=<Google Fonts Developer API key>
 //   kanvas.storeFile=../kanvas-release.jks
 //   kanvas.storePassword=...
 //   kanvas.keyAlias=kanvas
 //   kanvas.keyPassword=...
-// CI can pass the same values as environment variables (KANVAS_FONTS_KEY, KANVAS_STORE_FILE, ...).
+// CI can pass signing values as environment variables (KANVAS_STORE_FILE, ...).
 def localProps = new Properties()
 def lp = rootProject.file('local.properties')
 if (lp.exists()) lp.withInputStream { localProps.load(it) }
@@ -22,9 +21,11 @@ android {
         applicationId 'com.kvanie.kanvas'
         minSdk 29          // MediaStore RELATIVE_PATH saves need API 29+
         targetSdk 34
-        versionCode 3
-        versionName '0.3.0'
-        buildConfigField 'String', 'FONTS_API_KEY', "\"${secret('kanvas.fontsKey', 'KANVAS_FONTS_KEY')}\""
+        versionCode 4
+        versionName '0.4.0'
+        // Never bundle an API credential in a distributable APK.
+        // The curated catalog, named Google Fonts and uploaded fonts remain available.
+        buildConfigField 'String', 'FONTS_API_KEY', '""'
     }
 
     buildFeatures { buildConfig true }
@@ -56,7 +57,7 @@ android {
 
 // Keep the APK's page in sync with web/index.html (the single source of truth for the app UI).
 tasks.register('syncWeb', Copy) {
-    from rootProject.file('../web/index.html')
+    from(rootProject.file('../web')) { include '*.html', '*.css', '*.js', '*.txt' }
     into 'src/main/assets'
 }
 preBuild.dependsOn 'syncWeb'

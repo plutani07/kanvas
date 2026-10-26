@@ -1,5 +1,5 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"></head><body>
-<title>Kanvas</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><title>Kanvas Studio — Draw, paint, create</title></head><body>
+
 <style>
 /* Two screens, the way ibisPaint does it: My Gallery (every artwork on this device) and the canvas.
    The canvas keeps the art on screen: undo/redo and three popups on top, one bottom bar of seven buttons,
@@ -256,6 +256,7 @@ body.gal #gallery{display:flex}
 #viewer img{max-height:75%;max-width:100%;border-radius:6px;-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
 @media (prefers-reduced-motion:reduce){#sheet,#toast,#zoomChip{transition:none}}
 </style>
+<link rel="stylesheet" href="studio.css">
 
 <div id="app">
   <div id="stage">
@@ -285,7 +286,7 @@ body.gal #gallery{display:flex}
   <nav class="bbar" id="gBar" aria-label="Gallery"></nav>
 </section>
 <div id="pop" hidden></div>
-<div id="sheet" role="dialog" aria-labelledby="shTitle"><div class="sh-head"><button class="ib" id="shBack" aria-label="Back" hidden></button><h2 id="shTitle"></h2><div id="shAct"></div><button class="ib" id="shClose" aria-label="Close"></button></div><div class="sh-body" id="shBody"></div><div class="sh-foot" id="shFoot" hidden></div></div>
+<div id="sheet" inert role="dialog" aria-labelledby="shTitle"><div class="sh-head"><button class="ib" id="shBack" aria-label="Back" hidden></button><h2 id="shTitle"></h2><div id="shAct"></div><button class="ib" id="shClose" aria-label="Close"></button></div><div class="sh-body" id="shBody"></div><div class="sh-foot" id="shFoot" hidden></div></div>
 <div id="toast" role="status"></div>
 <input type="file" id="fileIn" accept="image/*" hidden>
 <input type="file" id="fileQR" accept="image/*" hidden>
@@ -386,6 +387,7 @@ const DB={db:null,
  async set(k,v){try{await this.put(k,v)}catch(e){}},
  /* put and del throw, for writes the artwork depends on */
  async put(k,v){const db=await this.open();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error('abort'))})},
+ async batch(entries){const db=await this.open();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite'),store=t.objectStore('kv');for(const [k,v] of entries)store.put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error('abort'))})},
  async del(k){const db=await this.open();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
 };
 const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -708,7 +710,7 @@ function oneUp(cancel){clearTimeout(lpTimer);if(picking){picking=false;$('#loupe
  XD=null;req()}
 view.addEventListener('contextmenu',e=>e.preventDefault());
 $('#stage').addEventListener('wheel',e=>{e.preventDefault();const r=view.getBoundingClientRect(),m={x:e.clientX-r.left,y:e.clientY-r.top},d=toDoc(m.x,m.y);S.view.s=clamp(S.view.s*Math.exp(-e.deltaY*.0015),.05,32);const p=toScr(d.x,d.y);S.view.x+=m.x-p.x;S.view.y+=m.y-p.y;req()},{passive:false});
-window.addEventListener('keydown',e=>{if(e.target.closest&&e.target.closest('input,textarea'))return;if(inGallery){if(e.key==='Escape')kanvasBack();return}const k=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();e.shiftKey?redo():undo();return}const map={b:'brush',e:'eraser',v:'move',l:'select',g:'fill',i:'picker',t:'text',r:'blur',s:'smudge'};if(!e.ctrlKey&&!e.metaKey&&map[k])setTool(map[k]);if(k==='enter'&&FL)applyTransform();if(k==='escape')kanvasBack()});
+window.addEventListener('keydown',e=>{if(e.defaultPrevented||e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]'))return;if(inGallery){if(e.key==='Escape')kanvasBack();return}const k=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();e.shiftKey?redo():undo();return}const map={b:'brush',e:'eraser',v:'move',l:'select',g:'fill',i:'picker',t:'text',r:'blur',s:'smudge'};if(!e.ctrlKey&&!e.metaKey&&map[k])setTool(map[k]);if(k==='enter'&&FL)applyTransform();if(k==='escape')kanvasBack()});
 
 async function setTool(t){if(S.tool==='move'&&t!=='move'&&FL)await applyTransform();if(ST)endStroke();S.tool=t;
  renderOpts();uiTask();
@@ -756,13 +758,13 @@ $('#bProp').onclick=()=>{closePop();if(sheetName==='brushes'||sheetName==='props
 $('#bColor').onclick=()=>{closePop();sheetName==='color'?closeSheet():openColor()};
 $('#bLayer').onclick=()=>{closePop();(sheetName==='layers'||sheetName==='lmore')?closeSheet():openLayers()};
 $('#bFull').onclick=()=>setFull(true);$('#unfull').onclick=()=>setFull(false);
-$('#bBack').onclick=()=>{if(popName==='menu')return closePop();closeSheet();openPop('menu',`<div class="plist menu">${[['gallery','Back to My Gallery','gallery'],['png','Save image (PNG)','save'],['jpg','Save image (JPG)','save'],['saveproj','Save project file','layers'],['photo','Place a photo as a layer','image'],['ibis','Import ibisPaint brush (QR)','qr'],['fonts','Fonts','font'],['settings','Settings','cog'],['help','How to use','help']].map(([a,l,i])=>`<button class="mi" data-mn="${a}">${icon(i)}<span>${l}</span></button>`).join('')}</div>`,$('#bBack'),'up')};
-function menuAct(a){if(a==='gallery')goGallery();else if(a==='png'||a==='jpg')exportImage(a);else if(a==='saveproj')saveProject();else if(a==='photo')$('#fileIn').click();else if(a==='ibis')openIbis();else if(a==='fonts')openFonts(null);else if(a==='settings')openSettings();else if(a==='help')showTips(true)}
+$('#bBack').onclick=()=>{if(popName==='menu')return closePop();closeSheet();openPop('menu',`<div class="plist menu">${[['gallery','Back to My Gallery','gallery'],['commands','Find a command','help'],['png','Save image (PNG)','save'],['jpg','Save image (JPG)','save'],['saveproj','Save project file','layers'],['photo','Place a photo as a layer','image'],['ibis','Import ibisPaint brush (QR)','qr'],['fonts','Fonts','font'],['settings','Settings','cog'],['help','How to use','help']].map(([a,l,i])=>`<button class="mi" data-mn="${a}">${icon(i)}<span>${l}</span></button>`).join('')}</div>`,$('#bBack'),'up')};
+function menuAct(a){if(a==='commands')return studioCommands();if(a==='gallery')goGallery();else if(a==='png'||a==='jpg')exportImage(a);else if(a==='saveproj')saveProject();else if(a==='photo')$('#fileIn').click();else if(a==='ibis')openIbis();else if(a==='fonts')openFonts(null);else if(a==='settings')openSettings();else if(a==='help')showTips(true)}
 function setFull(on){document.body.classList.toggle('full',on);$('#unfull').hidden=!on;if(on){closePop();closeSheet()}}
 
 /* slider rows: a value, minus, the slider, plus. PM holds what each row's minus/plus does. */
 const PM={};
-const ctl=(id,min,max,step,val,cls)=>`<button class="pm" data-pm="${id}" data-d="-1" aria-label="Less">${icon('minus')}</button><input type="range" id="${id}" class="${cls||''}" min="${min}" max="${max}" step="${step}" value="${val}"><button class="pm" data-pm="${id}" data-d="1" aria-label="More">${icon('plus')}</button>`;
+const ctl=(id,min,max,step,val,cls)=>`<button class="pm" data-pm="${id}" data-d="-1" aria-label="Less">${icon('minus')}</button><input aria-label="${({oSize:"Brush size",oOp:"Brush opacity",lop:"Layer opacity",oFt:"Fill tolerance"})[id]||id}" type="range" id="${id}" class="${cls||''}" min="${min}" max="${max}" step="${step}" value="${val}"><button class="pm" data-pm="${id}" data-d="1" aria-label="More">${icon('plus')}</button>`;
 const drow=(id,min,max,step,val,txt,cls)=>`<div class="srow"><output id="${id}o">${txt}</output>${ctl(id,min,max,step,val,cls)}</div>`;
 const wrow=(id,label,min,max,step,val,txt,cls)=>`<div class="wrow"><div class="wtop"><span>${label}</span><output id="${id}o">${txt}</output></div><div class="wctl">${ctl(id,min,max,step,val,cls)}</div></div>`;
 function bindRow(id,o){const el=$('#'+id);if(!el)return;const out=$('#'+id+'o'),show=()=>{if(out)out.textContent=o.fmt()};
@@ -841,8 +843,8 @@ let sheetName=null,sheetPeek=false,onSheetClose=null;
 function openSheet(name,title,html,opts={}){if(onSheetClose){const f=onSheetClose;onSheetClose=null;f()}if(popName)closePop();const keep=opts.keepScroll&&sheetName===name?$('#shBody').scrollTop:0;
  sheetName=name;sheetPeek=!!opts.peek;$('#shTitle').textContent=title;$('#shBody').onclick=null;$('#shBody').innerHTML=html;$('#shAct').innerHTML=opts.act||'';
  const ft=$('#shFoot');ft.innerHTML=opts.foot||'';ft.hidden=!opts.foot;const bk=$('#shBack');bk.hidden=!opts.back;bk.onclick=opts.back||null;
- const s=$('#sheet');s.classList.toggle('tall',!!opts.tall);s.classList.toggle('flush',!!opts.flush);s.classList.toggle('mid',!!opts.mid);s.classList.add('open');$('#shBody').scrollTop=keep;onSheetClose=opts.onClose||null;barSync()}
-function closeSheet(){if(onSheetClose){const f=onSheetClose;onSheetClose=null;f()}const was=sheetName;sheetName=null;sheetPeek=false;$('#sheet').classList.remove('open');if(was&&!inGallery)renderOpts();else barSync()}
+ const s=$('#sheet');s.classList.toggle('tall',!!opts.tall);s.classList.toggle('flush',!!opts.flush);s.classList.toggle('mid',!!opts.mid);s.classList.add('open');s.inert=false;$('#shBody').scrollTop=keep;onSheetClose=opts.onClose||null;barSync()}
+function closeSheet(){if(onSheetClose){const f=onSheetClose;onSheetClose=null;f()}const was=sheetName;sheetName=null;sheetPeek=false;$('#sheet').classList.remove('open');$('#sheet').inert=true;if(was&&!inGallery)renderOpts();else barSync()}
 $('#shClose').onclick=closeSheet;
 const sl=(id,label,min,max,step,val,fmt)=>`<label class="sl"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><output id="${id}o">${fmt(val)}</output></label>`;
 function bindSl(id,fmt,fn){const el=$('#'+id);if(!el)return;el.addEventListener('input',()=>{const v=+el.value;$('#'+id+'o').textContent=fmt(v);fn(v)})}
@@ -1089,7 +1091,7 @@ const SEED_QR=[['SVBCWgAB+9BjZGBiYmBgNGRgYmBmYFB3YWBgYHa2YWBwqWJgsG9AxSBgo3ydyx5
  ['SVBCWgACI0RjZGBiYmBgLGUAkgwM6lFAto9LFQMDCNsvvs5lP29HkP3pVnn7C4uvO4szMNjOnDnLvoGB4YWihDgDFNiFc9naSULEQQBE2z10X2fHKreDgUhguyPwDVhvxtfDMDOAQEBWvnKu3s7g3rmL/55zdAy9ABK73vjYumr61bkSE6bUt/mcnc3A/GjmIpDq/0BgD3LQW74wJwaEY8C0z5mzIM23wkK9eJu2sJ/pEw7eecStGOxYp/4YuEP6YzRtz4DVAgETiiPtznjuggmC9MHMxiGGwYeYceasHdT8////NQMA','halftone',{size:180,spacing:.18,taperStart:0,taperEnd:0,minSize:1,note:'From your ibisPaint QR (the halftone one). The dot screen is rebuilt with the Halftone tip.'}]];
 async function seedIbis(){const out=[];for(const[b64,tip,ov]of SEED_QR){try{const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));const p=await parseIbisBrush(bytes);out.push(Object.assign(ibisToBrush(p,tip),ov))}catch(e){}}return out}
 function loadScript(src){return new Promise(res=>{const s=document.createElement('script');s.src=src;s.onload=()=>res(true);s.onerror=()=>{s.remove();res(false)};document.head.appendChild(s)})}
-async function ensureJsQR(){if(window.jsQR)return true;if(NATIVE&&await loadScript('jsQR.js')&&window.jsQR)return true;return(await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'))&&!!window.jsQR}
+async function ensureJsQR(){if(window.jsQR)return true;if(await loadScript('jsQR.js')&&window.jsQR)return true;return(await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'))&&!!window.jsQR}
 function qrRegion(img,sx,sy,sw,sh,maxDim){const k=Math.min(2.5,maxDim/Math.max(sw,sh)),w=Math.round(sw*k),h=Math.round(sh*k);if(w<40||h<40)return null;const c=mkC(w,h),x=c.getContext('2d',{willReadFrequently:true});x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(img,sx,sy,sw,sh,0,0,w,h);const d=x.getImageData(0,0,w,h);const r=window.jsQR(d.data,w,h,{inversionAttempts:'attemptBoth'});return r&&r.binaryData&&r.binaryData.length?new Uint8Array(r.binaryData):null}
 function scanImage(img){const W=img.naturalWidth||img.width,H=img.naturalHeight||img.height;for(const m of[1000,700,1400]){const r=qrRegion(img,0,0,W,H,m);if(r)return r}for(const[a,b,c,d]of[[0,0,.6,.6],[.4,0,.6,.6],[0,.4,.6,.6],[.4,.4,.6,.6],[.2,.2,.6,.6],[.3,0,.7,.5],[.3,.5,.7,.5]]){const r=qrRegion(img,a*W,b*H,c*W,d*H,900);if(r)return r}return null}
 let ibisImg=null;
@@ -1117,11 +1119,19 @@ const blobB64=b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(Strin
 async function offer(filename,blob,mime){
  if(NATIVE&&NATIVE.saveFile){try{const res=String(NATIVE.saveFile(filename,mime,await blobB64(blob)));if(res.startsWith('error'))toast('Couldn’t save: '+res.slice(6),3500);else toast('Saved to '+res,3000)}catch(e){toast('Couldn’t save the file')}return}
  const dl=await getDL();if(dl){try{await dl.save({filename,data:blob});toast('Saved '+filename);return}catch(e){if(e&&e.code==='declined')return;if(e&&e.code==='rate_limited')return toast('A save is already waiting for your answer')}}
- if(mime.startsWith('image/')){const u=URL.createObjectURL(blob);const v=document.createElement('div');v.id='viewer';v.innerHTML=`<img src="${u}" alt="Your exported artwork"><p class="note" style="color:#ddd;text-align:center">Press and hold the image to save it.</p><button class="btn pri">Done</button>`;v.querySelector('button').onclick=()=>v.remove();document.body.appendChild(v)}else toast('Saving files isn’t available in this view')}
+ const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast('Downloaded '+filename)}
+
 function stamp(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')}
 function exportImage(kind){if(FL)return toast('Finish the transform first');compositeAll();let c=comp;if(kind==='jpg'){c=mkC(S.W,S.H);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S.W,S.H);x.drawImage(comp,0,0)}c.toBlob(b=>b&&offer(fileName(S.docName)+'-'+stamp()+'.'+kind,b,kind==='jpg'?'image/jpeg':'image/png'),kind==='jpg'?'image/jpeg':'image/png',.92)}
-function saveProject(){const data={app:'kanvas',v:1,W:S.W,H:S.H,active:S.active,name:S.docName,layers:S.layers.map(L=>({name:L.name,visible:L.visible,opacity:L.opacity,blend:L.blend,alphaLock:L.alphaLock,clip:L.clip,text:L.text,png:L.canvas.toDataURL('image/png')}))};offer(fileName(S.docName)+'-'+stamp()+'.json',new Blob([JSON.stringify(data)],{type:'application/json'}),'application/json')}
-async function loadDocData(d,getImg){if(FL)cancelTransform();allocDoc(d.W,d.H);S.layers=[];for(const l of d.layers){const L=newLayer(l.name);Object.assign(L,{visible:l.visible,opacity:l.opacity,blend:l.blend,alphaLock:!!l.alphaLock,clip:!!l.clip,text:l.text||null});const im=await getImg(l);if(im)L.ctx.drawImage(im,0,0);S.layers.push(L)}S.active=clamp(d.active|0,0,S.layers.length-1);S.docName=d.name||'Untitled';S.undo=[];S.redo=[];S.histBytes=0;uiDoc();uiHist();uiTask();fitView();compositeAll();renderLayers();for(const L of S.layers)if(L.text)ensureFont(L.text)}
+function saveProject(){if(FL)return toast('Finish the transform first');if(ST)endStroke();const data={app:'kanvas',v:1,W:S.W,H:S.H,active:S.active,name:S.docName,layers:S.layers.map(L=>({name:L.name,visible:L.visible,opacity:L.opacity,blend:L.blend,alphaLock:L.alphaLock,clip:L.clip,text:L.text,png:L.canvas.toDataURL('image/png')}))};offer(fileName(S.docName)+'-'+stamp()+'.json',new Blob([JSON.stringify(data)],{type:'application/json'}),'application/json')}
+async function loadDocData(d,getImg){
+ // Decode before changing the live document: panels never see a half-loaded layer stack.
+ const images=[];try{for(const l of d.layers)images.push(await getImg(l))}catch(e){for(const im of images)im?.close?.();throw e}
+ if(FL)cancelTransform();allocDoc(d.W,d.H);S.layers=[];
+ for(let i=0;i<d.layers.length;i++){const l=d.layers[i],L=newLayer(l.name);Object.assign(L,{visible:l.visible,opacity:l.opacity,blend:l.blend,alphaLock:!!l.alphaLock,clip:!!l.clip,text:l.text||null});const im=images[i];if(im){L.ctx.drawImage(im,0,0);im.close?.()}S.layers.push(L)}
+ S.active=clamp(d.active|0,0,S.layers.length-1);S.docName=d.name||'Untitled';S.undo=[];S.redo=[];S.histBytes=0;uiDoc();uiHist();uiTask();fitView();compositeAll();renderLayers();for(const L of S.layers)if(L.text)ensureFont(L.text)
+}
+
 
 /* ---------- My Gallery: every artwork on this device ----------
    'arts' is the list in display order (name, size, dates, a small thumbnail); each artwork's layers live under 'art:<id>'.
@@ -1139,15 +1149,23 @@ const fmtDate=t=>t?new Date(t).toLocaleString([],{dateStyle:'medium',timeStyle:'
 const fileName=n=>String(n||'kanvas').replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'').trim().slice(0,60)||'kanvas';
 function nextName(){let n=0;for(const a of[...ARTS,...TRASH]){const m=/^Untitled (\d+)$/.exec(a.name);if(m)n=Math.max(n,+m[1])}return'Untitled '+(n+1)}
 
-let dirtyT=null,dirty=false;
-function markDirty(){dirty=true;clearTimeout(dirtyT);dirtyT=setTimeout(saveDoc,2500)}
+let dirtyT=null,dirty=false,saveState='saved',editRevision=0;
+function markDirty(){dirty=true;editRevision++;saveState='pending';clearTimeout(dirtyT);dirtyT=setTimeout(saveDoc,2500)}
 /* Called on every pause too (NATIVE onPause). Resolves once the open artwork is on disk. */
-function saveDoc(){clearTimeout(dirtyT);if(!S.artId||!dirty)return IO;return queue(saveNow)}
-async function saveNow(){if(!dirty||!S.artId)return;dirty=false;const id=S.artId;
- try{const layers=[];for(const L of S.layers)layers.push({name:L.name,visible:L.visible,opacity:L.opacity,blend:L.blend,alphaLock:L.alphaLock,clip:L.clip,text:L.text,blob:await toBlob(L.canvas,'image/png')});
-  await DB.put('art:'+id,{W:S.W,H:S.H,active:S.active,name:S.docName,layers});
-  const m=ARTS.find(a=>a.id===id);if(m){Object.assign(m,{name:S.docName,W:S.W,H:S.H,layers:S.layers.length,updated:Date.now(),thumb:await thumbOf(comp)});await DB.put('arts',ARTS)}}
- catch(e){dirty=true;toast('Couldn’t save this artwork on the device. If storage is full, free some space; it tries again as you keep drawing.',5000)}}
+function saveDoc(){clearTimeout(dirtyT);if(!S.artId||!dirty)return IO;if(ST||FL){dirtyT=setTimeout(saveDoc,750);return IO}return queue(async()=>{while(dirty&&S.artId){await saveNow();if(saveState==='error')break}})}
+async function saveNow(){if(!dirty||!S.artId)return;const id=S.artId,revision=editRevision,previousName=ARTS.find(a=>a.id===S.artId)?.name;
+ // Capture all canvases and metadata before yielding. Drawing may continue while PNGs encode.
+ saveState='saving';
+ const W=S.W,H=S.H,active=S.active,name=S.docName;
+ const pending=S.layers.map(L=>({name:L.name,visible:L.visible,opacity:L.opacity,blend:L.blend,alphaLock:L.alphaLock,clip:L.clip,text:L.text?{...L.text}:null,blob:toBlob(L.canvas,'image/png')}));
+ const thumb=thumbOf(comp);
+ try{const layers=await Promise.all(pending.map(async l=>({...l,blob:await l.blob}))),thumbnail=await thumb;
+  const arts=ARTS.map(a=>a.id===id?{...a,name,W,H,layers:layers.length,updated:Date.now(),thumb:thumbnail}:a);
+  await DB.batch([['art:'+id,{W,H,active,name,layers}],['arts',arts]]);
+  const meta=ARTS.find(a=>a.id===id);if(meta){if(meta.name===previousName)meta.name=name;Object.assign(meta,{W,H,layers:layers.length,updated:arts.find(a=>a.id===id).updated,thumb:thumbnail})}
+  if(S.artId===id&&revision===editRevision){dirty=false;saveState='saved'}else saveState='pending';
+ }catch(e){dirty=true;saveState='error';toast('Couldn’t save this artwork. Download a project backup and check device storage.',5000)}
+}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)saveDoc()});
 let bT=null;function saveBrushes(){clearTimeout(bT);bT=setTimeout(()=>DB.set('brushes',{list:S.brushes,smudge:S.smudgeB,blur:S.blurB}),600)}
 function savePrefs(){DB.set('prefs',{color:S.color,recent:S.recent,brushSel:S.brushSel,fill:S.fill,wand:S.wand,selMode:S.selMode,selOp:S.selOp,lastText,set:S.set,palette:S.palette})}
@@ -1158,7 +1176,7 @@ async function flattenRec(rec){const W=rec.W,H=rec.H,c=mkC(W,H),x=c.getContext('
  for(let i=0;i<Ls.length;i++){const L=Ls[i];if(L.clip&&i>0)continue;const cl=[];let j=i+1;while(j<Ls.length&&Ls[j].clip){cl.push(j);j++}if(!L.visible||!im[i])continue;
   x.globalAlpha=L.opacity;x.globalCompositeOperation=L.blend||'source-over';x.drawImage(im[i],0,0);
   for(const k of cl){const C=Ls[k];if(!C.visible||!im[k])continue;tx.globalAlpha=1;tx.globalCompositeOperation='copy';tx.drawImage(im[k],0,0);tx.globalCompositeOperation='destination-in';tx.drawImage(im[i],0,0);x.globalAlpha=C.opacity;x.globalCompositeOperation=C.blend||'source-over';x.drawImage(t,0,0)}}
- x.globalAlpha=1;x.globalCompositeOperation='source-over';return c}
+ x.globalAlpha=1;x.globalCompositeOperation='source-over';for(const bitmap of im)bitmap?.close?.();return c}
 async function addRec(rec){const id=newId(),now=Date.now(),thumb=await thumbOf(await flattenRec(rec));
  await queue(async()=>{await DB.put('art:'+id,rec);ARTS.unshift({id,name:rec.name,W:rec.W,H:rec.H,created:now,updated:now,layers:rec.layers.length,thumb});await DB.put('arts',ARTS)});gPick=id;return id}
 
@@ -1171,10 +1189,10 @@ async function loadGallery(){TRASH=(await DB.get('trash'))||[];const arts=await 
 async function goGallery(){if(FL)await applyTransform();if(ST)endStroke();closeSheet();closePop();setFull(false);showGallery();await saveDoc();if(inGallery)renderGallery()}
 function showGallery(){inGallery=true;document.body.classList.add('gal');renderGallery()}
 function showCanvas(){inGallery=false;document.body.classList.remove('gal');closeSheet();closePop();resizeView();fitView();renderOpts();uiTask();uiHist();showTips(false)}
-async function openArt(id){const m=ARTS.find(a=>a.id===id);if(!m)return;await saveDoc();const rec=await DB.get('art:'+id);if(!rec||!rec.layers){toast('This artwork couldn’t be read from the device');return}
+async function openArt(id){const m=ARTS.find(a=>a.id===id);if(!m)return;await saveDoc();if(dirty)return toast('Save failed. Download a project backup before switching artworks.');const rec=await DB.get('art:'+id);if(!rec||!rec.layers){toast('This artwork couldn’t be read from the device');return}
  try{await loadDocData(rec,async l=>l.blob?await createImageBitmap(l.blob):null)}catch(e){toast('This artwork couldn’t be opened');return}
  S.artId=id;S.docName=m.name;dirty=false;clearTimeout(dirtyT);gPick=id;showCanvas()}
-async function createArt(w,h,pic){closeSheet();if(!inGallery&&FL)await applyTransform();await saveDoc();
+async function createArt(w,h,pic){if(!Number.isInteger(w)||!Number.isInteger(h)||w<16||h<16||w>4096||h>4096)return toast('Canvas size must be whole pixels from 16 to 4096.');closeSheet();if(!inGallery&&FL)await applyTransform();await saveDoc();if(dirty)return toast('Save failed. Download a project backup before creating another canvas.');
  const id=newId(),now=Date.now(),name=nextName();newDoc(w,h);S.docName=name;
  if(pic){const L=S.layers[1];L.name=pic.name||'Picture';L.ctx.imageSmoothingQuality='high';L.ctx.drawImage(pic.img,0,0,w,h);compositeAll()}
  ARTS.unshift({id,name,W:w,H:h,created:now,updated:now,layers:S.layers.length,thumb:null});S.artId=id;gPick=id;dirty=true;showCanvas();saveDoc()}
@@ -1182,7 +1200,7 @@ async function createArt(w,h,pic){closeSheet();if(!inGallery&&FL)await applyTran
 function renderGallery(){$('#gCount').textContent=`(${ARTS.length})`;const g=$('#gGrid');
  if(!ARTS.length)g.innerHTML=`<div class="gempty">${icon('newc')}<p>No artworks yet.</p><button class="btn pri" id="gFirst">${icon('plus')}New canvas</button></div>`;
  else{if(!ARTS.some(a=>a.id===gPick))gPick=ARTS[0].id;
-  g.innerHTML=ARTS.map(a=>`<button class="gcard ${a.id===gPick&&!gSelMode?'on':''} ${gChosen.has(a.id)?'chosen':''}" data-art="${a.id}" aria-label="${esc(a.name)}"><span class="gimg">${a.thumb?`<img src="${thumbURL(a)}" alt="">`:''}${gSelMode?`<i class="gchk">${gChosen.has(a.id)?icon('check'):''}</i>`:''}</span><span class="gname">${esc(a.name)}</span><span class="gsub">${a.W} × ${a.H}</span></button>`).join('')}
+  g.innerHTML=(typeof galleryViewArts==='function'?galleryViewArts():ARTS).map(a=>`<button class="gcard ${a.id===gPick&&!gSelMode?'on':''} ${gChosen.has(a.id)?'chosen':''}" data-art="${a.id}" aria-label="${esc(a.name)}"><span class="gimg">${a.thumb?`<img src="${thumbURL(a)}" alt="">`:''}${gSelMode?`<i class="gchk">${gChosen.has(a.id)?icon('check'):''}</i>`:''}</span><span class="gname">${esc(a.name)}</span><span class="gsub">${a.W} × ${a.H}</span></button>`).join('')}
  $('#gFirst')&&($('#gFirst').onclick=openNew);
  const dis=ARTS.length?'':'disabled',b=$('#gBar');
  b.innerHTML=gSelMode?`<button id="gDelN" ${gChosen.size?'':'disabled'}><span class="txt" style="color:var(--danger)">${icon('trash')}Delete${gChosen.size?' ('+gChosen.size+')':''}</span></button><button id="gDone"><span class="txt">Done</span></button>`
@@ -1208,9 +1226,9 @@ function openInfo(id){const a=ARTS.find(x=>x.id===id);if(!a)return;
  openSheet('info','Artwork information',`<div class="info"><span class="gimg">${a.thumb?`<img src="${thumbURL(a)}" alt="">`:''}</span><dl><dt>Canvas</dt><dd>${a.W} × ${a.H} px</dd><dt>Layers</dt><dd>${a.layers||'?'}</dd><dt>Created</dt><dd>${fmtDate(a.created)}</dd><dt>Updated</dt><dd>${fmtDate(a.updated)}</dd></dl></div>
   <div class="sect">Title</div><input type="text" id="iTitle" value="${esc(a.name)}" maxlength="60" aria-label="Title">
   <div class="row"><button class="btn" id="iDup">${icon('copy')}Duplicate</button><button class="btn dng" id="iDel">${icon('trash')}Delete</button><button class="btn pri" id="iOpen" style="margin-left:auto">Edit</button></div>`);
- $('#iTitle').onchange=e=>{const v=e.target.value.trim().slice(0,60);if(!v||v===a.name)return;a.name=v;if(S.artId===a.id)S.docName=v;writeLists().catch(()=>toast('Couldn’t save the new title'));renderGallery()};
+ $('#iTitle').onchange=e=>{const v=e.target.value.trim().slice(0,60);if(!v||v===a.name)return;a.name=v;if(S.artId===a.id){S.docName=v;markDirty()}writeLists().catch(()=>toast('Couldn’t save the new title'));renderGallery()};
  $('#iDup').onclick=()=>{closeSheet();dupArt(a.id)};$('#iDel').onclick=()=>deleteArts([a.id]);$('#iOpen').onclick=()=>{closeSheet();openArt(a.id)}}
-async function dupArt(id){const a=ARTS.find(x=>x.id===id);if(!a)return;await saveDoc();const rec=await DB.get('art:'+id);if(!rec)return toast('Couldn’t read that artwork');
+async function dupArt(id){const a=ARTS.find(x=>x.id===id);if(!a)return;await saveDoc();if(dirty)return toast('Save failed. Download a project backup before switching artworks.');const rec=await DB.get('art:'+id);if(!rec)return toast('Couldn’t read that artwork');
  const nid=newId(),now=Date.now(),name=(a.name+' copy').slice(0,60);
  try{await queue(async()=>{await DB.put('art:'+nid,{...rec,name});ARTS.splice(Math.max(0,ARTS.indexOf(a)),0,{...a,id:nid,name,created:now,updated:now});await DB.put('arts',ARTS)})}catch(e){return toast('Couldn’t duplicate it. The device may be out of space.')}
  gPick=nid;renderGallery();toast('Duplicated '+a.name)}
@@ -1222,14 +1240,19 @@ function openTrash(){openSheet('trash',`Recently deleted (${TRASH.length})`,TRAS
  $$('[data-tr]').forEach(b=>b.onclick=async()=>{const i=TRASH.findIndex(a=>a.id===b.dataset.tr);if(i<0)return;const[a]=TRASH.splice(i,1);delete a.deleted;ARTS.unshift(a);gPick=a.id;renderGallery();openTrash();await writeLists().catch(()=>toast('Couldn’t save that change on the device'));toast('Restored '+a.name)});
  $$('[data-tx]').forEach(b=>b.onclick=async()=>{if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Delete for good?';return}const i=TRASH.findIndex(a=>a.id===b.dataset.tx);if(i<0)return;const[a]=TRASH.splice(i,1);
   try{await queue(async()=>{await DB.put('trash',TRASH);await DB.del('art:'+a.id)})}catch(e){toast('Couldn’t delete it from the device')}openTrash()})}
-async function exportArt(id,kind){const a=ARTS.find(x=>x.id===id);if(!a)return;await saveDoc();const rec=await DB.get('art:'+id);if(!rec)return toast('Couldn’t read that artwork');
+async function exportArt(id,kind){const a=ARTS.find(x=>x.id===id);if(!a)return;await saveDoc();if(dirty)return toast('Save failed. Download a project backup before switching artworks.');const rec=await DB.get('art:'+id);if(!rec)return toast('Couldn’t read that artwork');
  let c=await flattenRec(rec);if(kind==='jpg'){const j=mkC(c.width,c.height),x=j.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,j.width,j.height);x.drawImage(c,0,0);c=j}
  offer(fileName(a.name)+'-'+stamp()+'.'+kind,await toBlob(c,kind==='jpg'?'image/jpeg':'image/png',.92),kind==='jpg'?'image/jpeg':'image/png')}
-async function exportArtProject(id){const a=ARTS.find(x=>x.id===id);if(!a)return;await saveDoc();const rec=await DB.get('art:'+id);if(!rec)return toast('Couldn’t read that artwork');
+async function exportArtProject(id){const a=ARTS.find(x=>x.id===id);if(!a)return;await saveDoc();if(dirty)return toast('Save failed. Download a project backup before switching artworks.');const rec=await DB.get('art:'+id);if(!rec)return toast('Couldn’t read that artwork');
  const layers=[];for(const l of rec.layers)layers.push({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend,alphaLock:l.alphaLock,clip:l.clip,text:l.text,png:'data:image/png;base64,'+await blobB64(l.blob)});
  offer(fileName(a.name)+'-'+stamp()+'.json',new Blob([JSON.stringify({app:'kanvas',v:1,W:rec.W,H:rec.H,active:rec.active,name:a.name,layers})],{type:'application/json'}),'application/json')}
+function validateProject(d){
+ if(!d||d.app!=='kanvas'||!Number.isInteger(d.W)||!Number.isInteger(d.H)||d.W<16||d.H<16||d.W>4096||d.H>4096||!Array.isArray(d.layers)||!d.layers.length||d.layers.length>64||d.W*d.H*d.layers.length>64e6)throw new Error('Invalid project dimensions');
+ for(const l of d.layers){if(!l||typeof l.name!=='string'||!BLENDS.some(([v])=>v===(l.blend||'source-over'))||!Number.isFinite(l.opacity??1)||(l.opacity??1)<0||(l.opacity??1)>1||typeof l.png!=='string'||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(l.png))throw new Error('Invalid layer');}
+}
+async function projectPNG(data,W,H){const blob=await(await fetch(data)).blob(),im=await createImageBitmap(blob);try{if(im.width!==W||im.height!==H)throw new Error('Invalid layer size');return blob}finally{im.close()}}
 $('#fileProj').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
- try{const d=JSON.parse(await f.text());if(d.app!=='kanvas'||!Array.isArray(d.layers))throw 0;const layers=[];for(const l of d.layers)layers.push({name:l.name,visible:l.visible!==false,opacity:l.opacity??1,blend:l.blend||'source-over',alphaLock:!!l.alphaLock,clip:!!l.clip,text:l.text||null,blob:await (await fetch(l.png)).blob()});
+ try{const d=JSON.parse(await f.text());validateProject(d);const layers=[];for(const l of d.layers)layers.push({name:l.name,visible:l.visible!==false,opacity:l.opacity??1,blend:l.blend||'source-over',alphaLock:!!l.alphaLock,clip:!!l.clip,text:l.text||null,blob:await projectPNG(l.png,d.W,d.H)});
   await addRec({W:d.W,H:d.H,active:d.active|0,name:String(d.name||f.name.replace(/\.json$/i,'')).slice(0,60),layers});renderGallery();toast('Added to My Gallery')}catch(_){toast('That isn’t a Kanvas project file')}};
 $('#fileNewPic').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const img=new Image();img.src=URL.createObjectURL(f);try{await img.decode()}catch(_){return toast('That file couldn’t be opened as a picture')}
  const k=Math.min(1,2560/Math.max(img.naturalWidth,img.naturalHeight));if(k<1)toast('The picture was scaled down to 2560 px so it stays smooth to draw on',3500);
@@ -1250,4 +1273,5 @@ addEventListener('resize',()=>{if(popName)closePop()});
  resizeView();uiColor();uiHist();setTool('brush');showGallery();
 })();
 </script>
+<script src="studio.js"></script>
 </body></html>
